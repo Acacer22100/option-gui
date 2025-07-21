@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 
 @st.cache_data
 def load_data():
@@ -154,21 +154,63 @@ else:
     option_rows = get_option_data(selected_date, selected_expiry, at_price, selected_session)
     if option_rows:
         st.subheader("下單操作")
+
+        # 外層橫向卷軸容器
+        st.markdown("""
+        <style>
+        .scroll-wrapper {
+            overflow-x: auto;
+            white-space: nowrap;
+            padding-bottom: 10px;
+        }
+        .option-row {
+            display: inline-block;
+            width: 1100px;
+            padding: 8px 10px;
+            border-bottom: 1px solid #ddd;
+            transition: background-color 0.2s;
+        }
+        .option-row:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .option-row:hover {
+            background-color: #eef6ff;
+        }
+        </style>
+        <div class="scroll-wrapper">
+        """, unsafe_allow_html=True)
+
+
         for i, row in enumerate(option_rows):
+            st.markdown("<div class='option-row'>", unsafe_allow_html=True)
             cols = st.columns(7)
-            cols[0].text(row["買權_價"])
-            if cols[1].button("買", key=f"buy_call_{st.session_state.curr_number}_{i}"):
-                add_trade("買進", "買權", row["履約價"], row["買權_價"], selected_date.strftime("%Y/%m/%d"), row["買權_時段"])
-            if cols[2].button("賣", key=f"sell_call_{st.session_state.curr_number}_{i}"):
-                add_trade("賣出", "買權", row["履約價"], row["買權_價"], selected_date.strftime("%Y/%m/%d"), row["買權_時段"])
-            cols[3].text(row["履約價"])
-            if cols[4].button("買", key=f"buy_put_{st.session_state.curr_number}_{i}"):
-                add_trade("買進", "賣權", row["履約價"], row["賣權_價"], selected_date.strftime("%Y/%m/%d"), row["賣權_時段"])
-            if cols[5].button("賣", key=f"sell_put_{st.session_state.curr_number}_{i}"):
-                add_trade("賣出", "賣權", row["履約價"], row["賣權_價"], selected_date.strftime("%Y/%m/%d"), row["賣權_時段"])
-            cols[6].text(row["賣權_價"])
+            with cols[0]:
+                st.text(row["買權_價"])
+            with cols[1]:
+                if st.button("買", key=f"buy_call_{st.session_state.curr_number}_{i}"):
+                    add_trade("買進", "買權", row["履約價"], row["買權_價"], selected_date.strftime("%Y/%m/%d"), row["買權_時段"])
+            with cols[2]:
+                if st.button("賣", key=f"sell_call_{st.session_state.curr_number}_{i}"):
+                    add_trade("賣出", "買權", row["履約價"], row["買權_價"], selected_date.strftime("%Y/%m/%d"), row["買權_時段"])
+            with cols[3]:
+                if row["履約價"] == at_price:
+                    st.markdown(f"<span style='font-weight: bold; font-size: 20px; color: #d62728;'>{row['履約價']}</span>", unsafe_allow_html=True)
+                else:
+                    st.text(row["履約價"])
+            with cols[4]:
+                if st.button("買", key=f"buy_put_{st.session_state.curr_number}_{i}"):
+                    add_trade("買進", "賣權", row["履約價"], row["賣權_價"], selected_date.strftime("%Y/%m/%d"), row["賣權_時段"])
+            with cols[5]:
+                if st.button("賣", key=f"sell_put_{st.session_state.curr_number}_{i}"):
+                    add_trade("賣出", "賣權", row["履約價"], row["賣權_價"], selected_date.strftime("%Y/%m/%d"), row["賣權_時段"])
+            with cols[6]:
+                st.text(row["賣權_價"])
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("</div>", unsafe_allow_html=True)
     else:
         st.write("無期權資料")
+
 
 st.subheader("下單明細")
 col1, col2 = st.columns(2)
@@ -204,10 +246,24 @@ if st.session_state.trades:
             else:
                 pnl += qty * np.minimum((premium - (strike - settlement_prices)) * 50 - 100, (premium * 50) - 100)
 
-    fig, ax = plt.subplots()
-    ax.plot(settlement_prices, pnl)
-    ax.axhline(0, color='gray', linestyle='--')
-    ax.set_xlabel("結算價")
-    ax.set_ylabel("損益")
-    ax.set_title("損益圖")
-    st.pyplot(fig)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=settlement_prices,
+        y=pnl,
+        mode='lines',
+        name='損益',
+        hovertemplate='結算價：%{x}<br>損益：%{y} 元<extra></extra>',
+        line=dict(color='royalblue')
+    ))
+    fig.add_hline(y=0, line_dash="dash", line_color="gray")
+
+    fig.update_layout(
+        title="損益圖（滑鼠懸停顯示點數）",
+        xaxis_title="結算價",
+        yaxis_title="損益",
+        font=dict(family="Microsoft JhengHei", size=14),
+        hoverlabel=dict(bgcolor="white", font_size=14),
+        margin=dict(l=40, r=40, t=60, b=40)
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
